@@ -13,6 +13,7 @@ from .utils.timer import Timer
 from .utils.functions import check_keys, remove_prefix, load_model
 from .utils.config import cfg
 from .models.faceboxes import FaceBoxesNet
+from .utils.nms import py_cpu_nms
 
 # some global configs
 confidence_threshold = 0.05
@@ -116,8 +117,8 @@ class FaceBoxes:
 
         # do NMS
         dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
-        # keep = py_cpu_nms(dets, args.nms_threshold)
-        keep = nms(dets, nms_threshold)
+        keep = py_cpu_nms.py_cpu_nms(dets, nms_threshold)
+        # keep = nms(dets, nms_threshold)
         dets = dets[keep, :]
 
         # keep top-K faster NMS
