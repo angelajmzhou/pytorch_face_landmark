@@ -23,7 +23,7 @@ from common.utils import BBox, drawLandmark, drawLandmark_multiple
 from FaceBoxes import FaceBoxes
 from Retinaface import Retinaface
 from MTCNN import detect_faces
-from blur_detection import detect_blur_fft, variance_of_laplacian
+from blur_detection import detect_blur_fft, variance_of_laplacian, hwd_blur_detect
 from models.basenet import MobileNet_GDConv
 from models.pfld_compressed import PFLDInference
 from models.mobilefacenet import MobileFaceNet
@@ -39,6 +39,16 @@ def eye_aspect_ratio(eye):
     ear = (A + B) / (2.0 * C)
     return ear
 
+
+def SPIGA_eye_aspect_ratio(eye):
+    A = dist.euclidean(eye[1], eye[7])
+    B = dist.euclidean(eye[2], eye[6])
+    C = dist.euclidean(eye[3], eye[5])
+    D = dist.euclidean(eye[0], eye[4])
+    ear = (A + B + C) / (3.0 * D)
+    return ear
+
+
 parser = argparse.ArgumentParser(description='Blink and Blur Detection')
 # Datasets
 parser.add_argument('--backbone', default='MobileFaceNet', type=str,
@@ -47,10 +57,12 @@ parser.add_argument('--detector', default='Retinaface', type=str,
                     help='choose which face detector to use: MTCNN, FaceBoxes, Retinaface')
 parser.add_argument('--spigaconfig', default='wflw', type=str,
                     help='choose SPIGA config: wflw, 300wpublic, 300wprivate, merlrav, cofw68')
-parser.add_argument('--showlandmark', default='False', type=bool,
+parser.add_argument('--showlandmark', default=False, type=bool,
                     help='choose whether to show facial landmarking on output images')
 parser.add_argument('--blurdetect', default='fft', type=str,
-                    help='choose blur detection method: fft, vol')
+                    help='choose blur detection method: fft, vol, hwd')
+parser.add_argument('--filepath', default='data/', type=str,
+                    help='image directory in data/*.JPG (or other filetype) format')
 args = parser.parse_args()
 mean = np.asarray([ 0.485, 0.456, 0.406 ])
 std = np.asarray([ 0.229, 0.224, 0.225 ])
@@ -88,7 +100,7 @@ def load_model():
         model = SPIGAFramework(ModelConfig(args.spigaconfig))
         print("Use SPIGA as backbone")        
     else:
-        print('Error: not suppored backbone')    
+        print('Error: not supported backbone')    
     return model
 
 if __name__ == '__main__':
@@ -108,19 +120,12 @@ if __name__ == '__main__':
     model = load_model()
     if args.backbone != 'SPIGA':
         model = model.eval()
-    filenames=glob.glob("data/open/peng/images/*.jpg")
+    filenames=glob.glob(args.filepath)
 
     for imgname in filenames:
         print(imgname)
         img = cv2.imread(imgname)
         org_img = Image.open(imgname)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        if args['blurdetect'] == 'fft':
-            mean, blurry = detect_blur_fft(gray)
-        elif args['blurdetect'] == 'vol':
-            blurry = variance_of_laplacian(gray)
-        else:
-            print("Invalid blur detection method.")
         height,width,_=img.shape
         if args.detector=='MTCNN':
             # perform face detection using MTCNN
@@ -133,7 +138,7 @@ if __name__ == '__main__':
             retinaface=Retinaface.Retinaface()    
             faces = retinaface(img)            
         else:
-            print('Error: not suppored detector')        
+            print('Error: not supported detector')        
         ratio=0
         if len(faces)==0:
             print('NO face is detected!')
@@ -169,10 +174,21 @@ if __name__ == '__main__':
             new_bbox = list(map(int, [x1, x2, y1, y2]))
             new_bbox = BBox(new_bbox)
             cropped=img[new_bbox.top:new_bbox.bottom,new_bbox.left:new_bbox.right]
+            gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+            blurry=False
+            if args.blurdetect == 'fft':
+                mean, blurry = detect_blur_fft(gray, imgname, size = 60, thresh = -1)
+                img = cv2.putText(img,("mean: " + str(mean)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA) 
+            elif args.blurdetect == 'vol':
+                blurry = variance_of_laplacian(gray, thresh = 5)
+            elif args.blurdetect == 'hwd':
+                per, blurry = hwd_blur_detect(img, threshold = 50, minZero=0.005)
+                img = cv2.putText(img,("Per: " + str(per)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA) 
+            else:
+                print("Invalid blur detection method.")
             if (dx > 0 or dy > 0 or edx > 0 or edy > 0):
                 cropped = cv2.copyMakeBorder(cropped, int(dy), int(edy), int(dx), int(edx), cv2.BORDER_CONSTANT, 0)            
             cropped_face = cv2.resize(cropped, (out_size, out_size))
-
             if cropped_face.shape[0]<=0 or cropped_face.shape[1]<=0:
                 continue
             test_face = cropped_face.copy()
@@ -198,62 +214,37 @@ if __name__ == '__main__':
             if args.showlandmark:
                 if args.backbone == 'SPIGA':
                     plotter = Plotter()
-                    canvas = plotter.landmarks.draw_landmarks(img, landmark)
+                    img = plotter.landmarks.draw_landmarks(img, landmark)
                     headpose = np.array(features['headpose'][0])
-                    canvas = plotter.hpose.draw_headpose(canvas, [x1,y1,x2,y2], headpose[:3], headpose[3:], euler=True)
+                    img = plotter.hpose.draw_headpose(img, [x1,y1,x2,y2], headpose[:3], headpose[3:], euler=True)
                 landmark = new_bbox.reprojectLandmark(landmark)
                 img = drawLandmark_multiple(img, new_bbox, landmark)
-            # crop and aligned the face
-            lefteye_x=0
-            lefteye_y=0
-            for i in range(36,42):
-                lefteye_x+=landmark[i][0]
-                lefteye_y+=landmark[i][1]
-            lefteye_x=lefteye_x/6
-            lefteye_y=lefteye_y/6
-            lefteye=[lefteye_x,lefteye_y]
-
-            righteye_x=0
-            righteye_y=0
-            for i in range(42,48):
-                righteye_x+=landmark[i][0]
-                righteye_y+=landmark[i][1]
-            righteye_x=righteye_x/6
-            righteye_y=righteye_y/6
-            righteye=[righteye_x,righteye_y]  
-
-            nose=landmark[33]
-            leftmouth=landmark[48]
-            rightmouth=landmark[54]
-            facial5points=[righteye,lefteye,nose,rightmouth,leftmouth]
-            warped_face = warp_and_crop_face(np.array(org_img), facial5points, reference, crop_size=(crop_size, crop_size))
-            img_warped = Image.fromarray(warped_face)
-
-            left_eye = landmark[36:42]
-            right_eye = landmark[42:48]
 
             # Calculate EAR for both eyes
-            left_ear = eye_aspect_ratio(left_eye)
-            right_ear = eye_aspect_ratio(right_eye)
-
+            if args.backbone == 'SPIGA':
+                left_eye = landmark[60:68]
+                right_eye = landmark[68:76]
+                left_ear = SPIGA_eye_aspect_ratio(left_eye)
+                right_ear = SPIGA_eye_aspect_ratio(right_eye)
+            else:
+                left_eye = landmark[36:42]
+                right_eye = landmark[42:48]
+                left_ear = eye_aspect_ratio(left_eye)
+                right_ear = eye_aspect_ratio(right_eye)
             # Average the eye aspect ratio
             ear = (left_ear + right_ear) / 2.0
             print("EAR: "+str(ear))
             # Threshold for closed eyes (typically around 0.2)
-            EYE_AR_THRESH = 0.25
+            EYE_AR_THRESH = 0.3
             open=True
             if ear < EYE_AR_THRESH:
               open=False
 
-            warped_face = warp_and_crop_face(np.array(org_img), facial5points, reference, crop_size=(crop_size, crop_size))
-            img_warped = Image.fromarray(warped_face)
-            
-            # save the aligned and cropped faces
-            img_warped.save(os.path.join('faces_detected', os.path.basename(imgname)[:-4]+'_'+str(k)+'.png'))  
-            #img = drawLandmark_multiple(img, new_bbox, facial5points)  # plot and show 5 points   
+        #img = drawLandmark_multiple(img, new_bbox, facial5points)  # plot and show 5 points 
+        blurry = False  
         if open and not blurry:
             cv2.imwrite(os.path.join('viable', os.path.basename(imgname)),img)# img
         else:
             cv2.imwrite(os.path.join('not_viable', os.path.basename(imgname)),img)# img
-        cv2.imwrite(os.path.join('results',os.path.basename(imgname)),canvas)
+        cv2.imwrite(os.path.join('results',os.path.basename(imgname)),img)
 
