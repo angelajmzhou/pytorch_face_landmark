@@ -31,6 +31,7 @@ from SPIGA.spiga.demo.visualize.plotter import Plotter
 from SPIGA.spiga.inference.config import ModelConfig
 from SPIGA.spiga.inference.framework import SPIGAFramework
 from utils.align_trans import get_reference_facial_points, warp_and_crop_face
+from filediff import compare_folders
 
 def eye_aspect_ratio(eye):
     A = dist.euclidean(eye[1], eye[5])
@@ -70,6 +71,8 @@ std = np.asarray([ 0.229, 0.224, 0.225 ])
 crop_size= 112
 scale = crop_size / 112.
 reference = get_reference_facial_points(default_square = True) * scale
+total=0
+count=0
 
 if torch.cuda.is_available():
     map_location=lambda storage, loc: storage.cuda()
@@ -176,12 +179,13 @@ if __name__ == '__main__':
             cropped=img[new_bbox.top:new_bbox.bottom,new_bbox.left:new_bbox.right]
             gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
             blurry=False
-            if args.blurdetect == 'fft':
+
+            if args.blurdetect == ' fft':
                 mean, blurry = detect_blur_fft(gray, imgname, size = 60, thresh = -1)
                 img = cv2.putText(img,("mean: " + str(mean)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA) 
-            elif args.blurdetect == 'vol':
+            elif args.blurdetect == ' vol':
                 blurry = variance_of_laplacian(gray, thresh = 5)
-            elif args.blurdetect == 'hwd':
+            elif args.blurdetect == ' hwd':
                 per, blurry = hwd_blur_detect(img, threshold = 50, minZero=0.005)
                 img = cv2.putText(img,("Per: " + str(per)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA) 
             else:
@@ -209,6 +213,8 @@ if __name__ == '__main__':
                 landmark = model(input).cpu().data.numpy()
             end = time.time()
             print('Time: {:.6f}s.'.format(end - start))
+            total += end-start
+            count +=1
             landmark = landmark.reshape(-1,2)
             # reshape into any # rows, 2 columns
             if args.showlandmark:
@@ -235,11 +241,11 @@ if __name__ == '__main__':
             ear = (left_ear + right_ear) / 2.0
             print("EAR: "+str(ear))
             # Threshold for closed eyes (typically around 0.2)
-            EYE_AR_THRESH = 0.3
+            EYE_AR_THRESH = 0.2
             open=True
             if ear < EYE_AR_THRESH:
               open=False
-
+            cv2.imwrite(os.path.join('faces_detected',os.path.basename(imgname)),img)
         #img = drawLandmark_multiple(img, new_bbox, facial5points)  # plot and show 5 points 
         blurry = False  
         if open and not blurry:
@@ -247,4 +253,28 @@ if __name__ == '__main__':
         else:
             cv2.imwrite(os.path.join('not_viable', os.path.basename(imgname)),img)# img
         cv2.imwrite(os.path.join('results',os.path.basename(imgname)),img)
+    print("average time: {:.6f}".format(total/count))
+    folder = ''
+    if args.filepath[5:9] == 'open':
+        folder = 'viable'
+    if args.filepath[5:9] == 'clos':
+        folder = 'not_viable'
+        
+    only_in_folder1, only_in_folder2, in_both_folders, count_folder1, count_folder2 = compare_folders(folder,args.filepath[:-5])
 
+    print(f"\nTotal files in folder 1: {count_folder1}")
+    print(f"Total files in folder 2: {count_folder2}")
+
+    print("\nFiles only in folder 1:")
+    for file in only_in_folder1:
+        print(file)
+
+    print("\nFiles only in folder 2:")
+    for file in only_in_folder2:
+        print(file)
+
+    print("\nFiles that are in both folders:")
+    for file in in_both_folders:
+        print(file)
+    print("\nPercent diff: "+ str(count_folder1/count_folder2))
+    print("average time: "+str(total/count))
