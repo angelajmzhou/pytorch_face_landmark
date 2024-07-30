@@ -179,17 +179,20 @@ if __name__ == '__main__':
             cropped=img[new_bbox.top:new_bbox.bottom,new_bbox.left:new_bbox.right]
             gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
             blurry=False
-
-            if args.blurdetect == ' fft':
-                mean, blurry = detect_blur_fft(gray, imgname)
+            start = time.time()
+            if args.blurdetect == 'fft':
+                mean, blurry = detect_blur_fft(gray, imgname, size = 60)
                 img = cv2.putText(img,("mean: " + str(mean)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA) 
-            elif args.blurdetect == ' vol':
-                blurry = variance_of_laplacian(gray, thresh = 5)
-            elif args.blurdetect == ' hwd':
-                per, blurry = hwd_blur_detect(img, threshold = 50, minZero=0.005)
+            elif args.blurdetect == 'vol':
+                blurry = variance_of_laplacian(gray, thresh = 10)
+            elif args.blurdetect == 'hwd':
+                per, blurry = hwd_blur_detect(gray, threshold = 50, minZero=0.005)
                 img = cv2.putText(img,("Per: " + str(per)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA) 
             else:
                 print("Invalid blur detection method.")
+            end=time.time()
+            count+=1
+            total += end-start
             if (dx > 0 or dy > 0 or edx > 0 or edy > 0):
                 cropped = cv2.copyMakeBorder(cropped, int(dy), int(edy), int(dx), int(edx), cv2.BORDER_CONSTANT, 0)            
             cropped_face = cv2.resize(cropped, (out_size, out_size))
@@ -197,57 +200,6 @@ if __name__ == '__main__':
                 continue
             test_face = cropped_face.copy()
             test_face = test_face/255.0
-            if args.backbone=='MobileNet':
-                test_face = (test_face-mean)/std
-            test_face = test_face.transpose((2, 0, 1))
-            test_face = test_face.reshape((1,) + test_face.shape)
-            input = torch.from_numpy(test_face).float()
-            input= torch.autograd.Variable(input)
-            start = time.time()
-            if args.backbone=='MobileFaceNet':
-                landmark = model(input)[0].cpu().data.numpy()
-            elif args.backbone == 'SPIGA':
-                features = model.inference(img, [[new_bbox.x,new_bbox.y,new_bbox.w,new_bbox.h]])
-                landmark = np.array(features['landmarks'][0])
-            else:
-                landmark = model(input).cpu().data.numpy()
-            end = time.time()
-            print('Time: {:.6f}s.'.format(end - start))
-            total += end-start
-            count +=1
-            landmark = landmark.reshape(-1,2)
-            # reshape into any # rows, 2 columns
-            if args.showlandmark:
-                if args.backbone == 'SPIGA':
-                    plotter = Plotter()
-                    img = plotter.landmarks.draw_landmarks(img, landmark)
-                    headpose = np.array(features['headpose'][0])
-                    img = plotter.hpose.draw_headpose(img, [x1,y1,x2,y2], headpose[:3], headpose[3:], euler=True)
-                landmark = new_bbox.reprojectLandmark(landmark)
-                img = drawLandmark_multiple(img, new_bbox, landmark)
-
-            # Calculate EAR for both eyes
-            if args.backbone == 'SPIGA':
-                left_eye = landmark[60:68]
-                right_eye = landmark[68:76]
-                left_ear = SPIGA_eye_aspect_ratio(left_eye)
-                right_ear = SPIGA_eye_aspect_ratio(right_eye)
-            else:
-                left_eye = landmark[36:42]
-                right_eye = landmark[42:48]
-                left_ear = eye_aspect_ratio(left_eye)
-                right_ear = eye_aspect_ratio(right_eye)
-            # Average the eye aspect ratio
-            ear = (left_ear + right_ear) / 2.0
-            print("EAR: "+str(ear))
-            # Threshold for closed eyes (typically around 0.2)
-            EYE_AR_THRESH = 0.2
-            open=True
-            if ear < EYE_AR_THRESH:
-              open=False
-            cv2.imwrite(os.path.join('faces_detected',os.path.basename(imgname)),img)
-        #img = drawLandmark_multiple(img, new_bbox, facial5points)  # plot and show 5 points 
-        blurry = False  
         if open and not blurry:
             cv2.imwrite(os.path.join('viable', os.path.basename(imgname)),img)# img
         else:
@@ -255,9 +207,9 @@ if __name__ == '__main__':
         cv2.imwrite(os.path.join('results',os.path.basename(imgname)),img)
     print("average time: {:.6f}".format(total/count))
     folder = ''
-    if args.filepath[5:9] == 'open':
+    if args.filepath[-10:] == 'lear/*.jpg':
         folder = 'viable'
-    if args.filepath[5:9] == 'clos':
+    if args.filepath[-10:] == 'blur/*.jpg':
         folder = 'not_viable'
         
     only_in_folder1, only_in_folder2, in_both_folders, count_folder1, count_folder2 = compare_folders(folder,args.filepath[:-5])

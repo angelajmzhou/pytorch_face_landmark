@@ -63,6 +63,9 @@ def detect_blur_fft(image, imgname, size=50, thresh=10,vis=True):
 
 def variance_of_laplacian(image, thresh = 10.0):
     fm = cv2.Laplacian(image, cv2.CV_64F).var()
+    laplacian = cv2.Laplacian(image, cv2.CV_64F)
+    #laplacian = cv2.convertScaleAbs(laplacian)
+    cv2.imwrite('laplacian_image.jpg', laplacian)
     print("fm: "+str(fm))
     return (fm <= thresh)
 
@@ -71,7 +74,7 @@ def hwd_blur_detect(img, threshold = 35, minZero = 0.001):
     
     # Convert image to grayscale
     
-    M, N, _ = img.shape
+    M, N = img.shape
     
     # Crop input image to be 3 divisible by 2
     img = img[0:int(M/16)*16, 0:int(N/16)*16]
@@ -88,7 +91,7 @@ def hwd_blur_detect(img, threshold = 35, minZero = 0.001):
     E2 = np.sqrt(np.power(LH2, 2)+np.power(HL2, 2)+np.power(HH2, 2))
     E3 = np.sqrt(np.power(LH3, 2)+np.power(HL3, 2)+np.power(HH3, 2))
     
-    M1, N1, _ = E1.shape
+    M1, N1 = E1.shape
 
     # Sliding window size level 1
     sizeM1 = 8
