@@ -9,7 +9,7 @@ import os
 
 #try HAAR wavelet?
 
-def detect_blur_fft(image, imgname, size=50, thresh=10,vis=True):
+def detect_blur_fft(image, imgname, size=60, thresh=0,vis=True):
     (h,w) = image.shape
     #get center coordinate
     (cX, cY) = (int(w/2.0), int(h/2.0))
@@ -70,7 +70,7 @@ def variance_of_laplacian(image, thresh = 10.0):
     return (fm <= thresh)
 
 
-def hwd_blur_detect(img, threshold = 35, minZero = 0.001):
+def hwd_blur_detect(img, threshold = 35, minZero = 0.0005):
     
     # Convert image to grayscale
     

@@ -181,12 +181,14 @@ if __name__ == '__main__':
             blurry=False
 
             if args.blurdetect == ' fft':
-                mean, blurry = detect_blur_fft(gray, imgname)
+                mean, blurry = detect_blur_fft(gray, imgname, size= 60, thresh = -1)
                 img = cv2.putText(img,("mean: " + str(mean)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA) 
             elif args.blurdetect == ' vol':
-                blurry = variance_of_laplacian(gray, thresh = 5)
+                blurry = variance_of_laplacian(gray, thresh = 10)
             elif args.blurdetect == ' hwd':
-                per, blurry = hwd_blur_detect(img, threshold = 50, minZero=0.005)
+                #low threshold -> more likely blur classification 
+                #low minZero -> less likely
+                per, blurry = hwd_blur_detect(gray)
                 img = cv2.putText(img,("Per: " + str(per)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA) 
             else:
                 print("Invalid blur detection method.")
@@ -247,7 +249,6 @@ if __name__ == '__main__':
               open=False
             cv2.imwrite(os.path.join('faces_detected',os.path.basename(imgname)),img)
         #img = drawLandmark_multiple(img, new_bbox, facial5points)  # plot and show 5 points 
-        blurry = False  
         if open and not blurry:
             cv2.imwrite(os.path.join('viable', os.path.basename(imgname)),img)# img
         else:
