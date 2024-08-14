@@ -240,7 +240,7 @@ if __name__ == '__main__':
                 left_ear = eye_aspect_ratio(left_eye)
                 right_ear = eye_aspect_ratio(right_eye)
             # Average the eye aspect ratio
-            ear = (left_ear + right_ear) / 2.0
+            ear = min(left_ear, right_ear)
             print("EAR: "+str(ear))
             # Threshold for closed eyes (typically around 0.2)
             EYE_AR_THRESH = 0.2
