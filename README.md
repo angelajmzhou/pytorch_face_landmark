@@ -1,5 +1,5 @@
 # Blink and Blur Detection for Prof. Fuh's DCCV Lab
-Forked off Cunjian's Pytorch Face Landmark Detection repository (its README below). 
+Forked off Cunjian's Pytorch Face Landmark Detection repository (his README below). 
 
 ___
 # Pytorch Face Landmark Detection
