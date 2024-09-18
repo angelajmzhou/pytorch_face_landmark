@@ -1,3 +1,7 @@
+# Blink and Blur Detection for Prof. Fuh's DCCV Lab
+Forked off Cunjian's Pytorch Face Landmark Detection repository (its README below). 
+
+___
 # Pytorch Face Landmark Detection
 Implementation of face landmark detection with PyTorch. The models were trained using coordinate-based or heatmap-based regression methods. Different face detetors were supported. A [video demo](https://lnkd.in/eH27JcP) and [image detection](https://github.com/cunjian/pytorch_face_landmark/tree/master/results) results were displayed here. 
 
